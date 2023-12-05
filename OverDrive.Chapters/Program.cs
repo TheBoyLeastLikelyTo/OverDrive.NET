@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Xml;
 using System.Xml.Linq;
 
@@ -12,28 +13,19 @@ public class Program
 {
     public static void Main(string[] args)
     {
-        string folderPath = "";
+        
         
         if (args.Length != 1)
         {
             Console.WriteLine($"[INFO] Usage: <folder_path>");
             return;
         }
-        else if (!Directory.Exists(args[0]))
-        {
-            folderPath = args[0];
-        }
-        else
-        {
-            Console.WriteLine("[ERROR] Provided directory does not exist!");
-            return;
-        }
-        
-        // Check if directory is valid
+
+        string folderPath = args[0];
+
         if (!Directory.Exists(folderPath))
         {
-            // If directory not valid, abort
-            Console.WriteLine($"[ERROR] Directory '{folderPath}' is invalid!");
+            Console.WriteLine("[ERROR] Provided directory does not exist!");
             return;
         }
 
@@ -61,12 +53,14 @@ public class Program
             Console.WriteLine($"[ERROR] Error parsing gathered chapters: {ex.Message}");
         }
 
+        book.PrintAllChapters();
+
         // Create XML chapters file
         XDocument Final = book.CreateXml();
         Final.Save(Path.Combine(folderPath, "chapters.xml"));
 
         // Create txt chapters file
-        string txt = book.CreateTxt();
+        string txt = book.CreateFFMPEG();
         File.WriteAllText(Path.Combine(folderPath, "chapters.txt"), txt);
 
         // Quit the program
@@ -261,7 +255,7 @@ public class Program
 
         public readonly void PrintChapter()
         {
-            Console.WriteLine($"    {Name} == {marker.UnabridgedTime} ==> {AbridgedTime}{(Eliminate ? " ELIMINATED" : "")}");
+            Console.WriteLine($"{Name} == {marker.UnabridgedTime} ==> {AbridgedTime}{(Eliminate ? " ELIMINATED" : "")}");
         }
     }
 
@@ -296,8 +290,6 @@ public class Program
 
                 return Files.SelectMany(MP3 => // For each MP3 file in the files list:
                 {
-                    Console.WriteLine($"'{Path.GetFileName(MP3.FileName)}' ({AbridgedSeekPosition}):"); // Print file name and duration
-
                     // Duration of this MP3, and all previously parsed MP3s
                     AbridgedSeekPosition += MP3.Duration; // before processing the MP3's markers, add MP3 duration to seek position
 
@@ -326,14 +318,19 @@ public class Program
                         // Set abridged start time to calculated start time
                         chap.AbridgedTime = CalculatedChapterStart;
 
-                        // Print chapter to console
-                        chap.PrintChapter();
-
                         return chap;
                     });
                 })
                 .ToList();
             }
+        }
+
+        public readonly void PrintAllChapters()
+        {
+            Chapters.ForEach(chap =>
+            {
+                chap.PrintChapter();
+            });
         }
 
         private readonly void WriteMarkersToFileMass()
@@ -365,13 +362,50 @@ public class Program
 
         public readonly string CreateTxt()
         {
+            int paddingLength = Chapters.Count.ToString().Length;
+
             var chapterLines = Chapters.Select((chapter, index) =>
             {
+                string chapterIndex = (index + 1).ToString($"D{paddingLength}"); // Ensure two-digit index with leading zeros
                 string chapterTime = chapter.AbridgedTime.ToString("hh\\:mm\\:ss\\.fff");
-                return $"CHAPTER{index + 1}={chapterTime}\nCHAPTER{index + 1}NAME={chapter.Name}";
+                return $"CHAPTER{chapterIndex}={chapterTime}\nCHAPTER{chapterIndex}NAME={chapter.Name}";
             });
 
             return string.Join("\n", chapterLines);
+        }
+
+        public string CreateFFMPEG()
+        {
+            StringBuilder builder = new();
+
+            builder.AppendLine($";FFMETADATA1");
+            builder.AppendLine();
+
+            for (int i = 0; i < Chapters.Count; i++)
+            {
+                Chapter chap = Chapters[i];
+
+                double time = chap.AbridgedTime.TotalMilliseconds;
+                double endTime;
+
+                if (i == Chapters.Count - 1)
+                {
+                    endTime = time;
+                }
+                else
+                {
+                    endTime = Chapters[i + 1].AbridgedTime.TotalMilliseconds;
+                }
+
+                builder.AppendLine($"[CHAPTER]");
+                builder.AppendLine($"TIMEBASE=1/1000");
+                builder.AppendLine($"START={time}");
+                builder.AppendLine($"END={endTime}");
+                builder.AppendLine($"title={chap.Name}");
+                builder.AppendLine();
+            }
+
+            return builder.ToString();
         }
     }
 }
