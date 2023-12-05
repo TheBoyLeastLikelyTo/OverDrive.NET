@@ -13,8 +13,6 @@ public class Program
 {
     public static void Main(string[] args)
     {
-        
-        
         if (args.Length != 1)
         {
             Console.WriteLine($"[INFO] Usage: <folder_path>");
@@ -55,9 +53,10 @@ public class Program
 
         book.PrintAllChapters();
 
-        // Create XML chapters file
+        /* Create XML chapters file
         XDocument Final = book.CreateXml();
         Final.Save(Path.Combine(folderPath, "chapters.xml"));
+        */
 
         // Create txt chapters file
         string txt = book.CreateFFMPEG();
@@ -295,19 +294,7 @@ public class Program
 
                     return MP3.MediaMarkers.Select(marker => // For each MediaMarker in this MP3 file:
                     {
-                        // UnabridgedTime = when is this MediaMarker (chapter start) within the MP3 file?
-
-                        // To find the current chapter's start time if all MP3s combined, do the following:
-
-                        // Say you've processed 4 hours of MP3's already, and the current one is 30 minutes
-                        // Assume a particular chapter (marker) is 15 minutes (halfway) into this MP3 file
-
-                        // For each marker in the MP3 file:
-                        // Subtract 30 minutes from seek position (4 to 3.5 hours for this)
-                        // Then add the duration into the MP3 of the current marker (3.5 to 3.75 hours for this)
-
-                        // Considering the durations of all previously processed MP3 parts:
-                        // This chapter is 3.75 hours into an abridged version of all the MP3s
+                        // CalculatedChapterStart = (Duration of all MP3s including this one) - (duration of this part) + (duration into this part of marker)
 
                         // Calculate abridged start time based on the above formula
                         TimeSpan CalculatedChapterStart = AbridgedSeekPosition - MP3.Duration + marker.UnabridgedTime;
