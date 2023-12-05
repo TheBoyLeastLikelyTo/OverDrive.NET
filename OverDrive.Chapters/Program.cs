@@ -364,14 +364,23 @@ public class Program
         {
             int paddingLength = Chapters.Count.ToString().Length;
 
-            var chapterLines = Chapters.Select((chapter, index) =>
-            {
-                string chapterIndex = (index + 1).ToString($"D{paddingLength}"); // Ensure two-digit index with leading zeros
-                string chapterTime = chapter.AbridgedTime.ToString("hh\\:mm\\:ss\\.fff");
-                return $"CHAPTER{chapterIndex}={chapterTime}\nCHAPTER{chapterIndex}NAME={chapter.Name}";
-            });
+            StringBuilder builder = new();
 
-            return string.Join("\n", chapterLines);
+            for (int i = 0; i < Chapters.Count; i++)
+            {
+                Chapter currentChap = Chapters[i];
+                
+                if (currentChap.Eliminate)
+                {
+                    continue;
+                }
+
+                string chapterIndex = (i + 1).ToString($"D{paddingLength}"); // Ensure two-digit index with leading zeros
+                string chapterTime = currentChap.AbridgedTime.ToString("hh\\:mm\\:ss\\.fff");
+                builder.Append($"CHAPTER{chapterIndex}={chapterTime}\nCHAPTER{chapterIndex}NAME={currentChap.Name}");
+            }
+
+            return builder.ToString();
         }
 
         public string CreateFFMPEG()
@@ -383,9 +392,14 @@ public class Program
 
             for (int i = 0; i < Chapters.Count; i++)
             {
-                Chapter chap = Chapters[i];
+                Chapter currentChap = Chapters[i];
 
-                double time = chap.AbridgedTime.TotalMilliseconds;
+                if (currentChap.Eliminate)
+                {
+                    continue;
+                }
+
+                double time = currentChap.AbridgedTime.TotalMilliseconds;
                 double endTime;
 
                 if (i == Chapters.Count - 1)
@@ -401,7 +415,7 @@ public class Program
                 builder.AppendLine($"TIMEBASE=1/1000");
                 builder.AppendLine($"START={time}");
                 builder.AppendLine($"END={endTime}");
-                builder.AppendLine($"title={chap.Name}");
+                builder.AppendLine($"title={currentChap.Name}");
                 builder.AppendLine();
             }
 
