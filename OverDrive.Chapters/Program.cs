@@ -44,14 +44,12 @@ public class Program
         try
         {
             // Set the created book to one comprising all the file parts
-            book = Audiobook.CreateBook(FilePaths);
+            book = new Audiobook(FilePaths);
         }
         catch (Exception ex)
         {
             Console.WriteLine($"[ERROR] Error parsing gathered chapters: {ex.Message}");
         }
-
-        book.PrintAllChapters();
 
         /* Create XML chapters file
         XDocument Final = book.CreateXml();
@@ -66,17 +64,39 @@ public class Program
         return;
     }
 
-    public struct AudioFile
+    public readonly struct AudioFile
     {
-        public static AudioFile InterpretFile(string path)
-        {
-            return new AudioFile
-            {
-                track = new Track(path)
-            };
-        }
+        private readonly Track track;
 
-        private Track track;
+        public AudioFile(string path) => track = new Track(path);
+        private readonly string MediaMarkerPath => $"{Path.ChangeExtension(FileName, "xml")}";
+        public readonly string FileName => track.Path;
+        public readonly TimeSpan Duration => TimeSpan.FromSeconds(track.Duration);
+        public readonly List<MediaMarker> MediaMarkers
+        {
+            get
+            {
+                // Create new XmlDocument
+                XmlDocument odChapters = new();
+
+                if (File.Exists(MediaMarkerPath))
+                {
+                    // If MediaMarkers saved separately, load them instead of reading tags
+                    odChapters.LoadXml(File.ReadAllText(MediaMarkerPath));
+                }
+                else
+                {
+                    // No separate markers XML, read them from MP3 tags (MediaMarkersXml)
+                    odChapters.LoadXml(MediaMarkersXml);
+                }
+
+                // Create list of MediaMarkers based on XML contained in the "Markers" tag
+                return odChapters.SelectNodes("/Markers/Marker") // Select the applicable node
+                    ?.Cast<XmlNode>() // Convert it to XmlNode
+                    .Select(node => new MediaMarker(node)) // Return a MediaMarker of a particular node
+                    .ToList() ?? throw new Exception("MediaMarkers tag doesn't contain valid XML!"); // If null, error
+            }
+        }
 
         private readonly string MediaMarkersXml
         {
@@ -108,99 +128,15 @@ public class Program
             // Save the original MediaMarkersXml (MP3 tag contents) to the MediaMarkerPath (save locally)
             File.WriteAllText(MediaMarkerPath, MediaMarkersXml);
         }
-
-        private readonly string MediaMarkerPath
-        {
-            get
-            {
-                // Compile the MediaMarkerPath (where original tag stored locally) by changing the extension of MP3 file
-                return $"{Path.ChangeExtension(FileName, "xml")}";
-            }
-        }
-
-        public readonly string FileName
-        {
-            get
-            {
-                return track.Path; // Audio file original path
-            }
-        }
-
-        public readonly TimeSpan Duration
-        {
-            get
-            {
-                return TimeSpan.FromSeconds(track.Duration); // Audio file duration parsed to TimeSpan
-            }
-        }
-
-        public readonly List<MediaMarker> MediaMarkers
-        {
-            get
-            {
-                // Create new XmlDocument
-                XmlDocument odChapters = new();
-
-                if (File.Exists(MediaMarkerPath))
-                {
-                    // If MediaMarkers saved separately, load them instead of reading tags
-                    odChapters.LoadXml(File.ReadAllText(MediaMarkerPath));
-                }
-                else
-                {
-                    // No separate markers XML, read them from MP3 tags (MediaMarkersXml)
-                    odChapters.LoadXml(MediaMarkersXml);
-                }
-
-                // Create list of MediaMarkers based on XML contained in the "Markers" tag
-                return odChapters.SelectNodes("/Markers/Marker") // Select the applicable node
-                    ?.Cast<XmlNode>() // Convert it to XmlNode
-                    .Select(MediaMarker.FromXml) // Return a MediaMarker of a particular node
-                    .ToList() ?? throw new Exception("MediaMarkers tag doesn't contain valid XML!"); // If null, error
-            }
-        }
     }
 
-    public struct MediaMarker
+    public readonly struct MediaMarker
     {
-        public static MediaMarker FromXml(XmlNode markerNode)
-        {
-            return new MediaMarker
-            {
-                markerNode = markerNode
-            };
-        }       
+        private readonly XmlNode markerNode;
 
-        private static string NullCheck(string? contents)
-        {
-            if (contents == null)
-            {
-                throw new Exception($"[ERROR] MediaMarkers XML contains null node content!");
-            }
-            else
-            {
-                return contents;
-            }
-        }
-
-        private XmlNode markerNode;
-
-        public readonly string Name
-        {
-            get
-            {
-                return NullCheck(markerNode.SelectSingleNode("Name")?.InnerText);
-            }
-        }
-
-        private readonly string StartTime
-        {
-            get
-            {
-                return NullCheck(markerNode.SelectSingleNode("Time")?.InnerText);
-            }
-        }
-
+        public MediaMarker(XmlNode Node) => markerNode = Node;
+        public readonly string Name => markerNode.SelectSingleNode("Name")?.InnerText ?? throw new Exception($"[ERROR] MediaMarker XML contains no 'Name' field!");
+        private readonly string StartTime => markerNode.SelectSingleNode("Time")?.InnerText ?? throw new Exception($"[ERROR] MediaMarker XML contains no 'Time' field!");
         public readonly TimeSpan UnabridgedTime
         {
             get
@@ -223,102 +159,65 @@ public class Program
 
     struct Chapter
     {
-        public static Chapter FromMarker(MediaMarker marker)
-        {
-            return new Chapter
-            {
-                marker = marker
-            };
-        }
+        private readonly MediaMarker marker;
 
-        private MediaMarker marker;
-
-        public readonly string Name
-        {
-            get
-            {
-                return marker.Name;
-            }
-        }
-
+        public Chapter(MediaMarker Marker) => marker = Marker;
+        public readonly string Name => marker.Name;
         public TimeSpan AbridgedTime { get; set; }
-
-        public readonly bool Eliminate
-        {
-            get
-            {
-                // Some books include markers named with six extra spaces, these are redundant
-                return Name.Contains("      ");
-            }
-        }
-
+        public readonly bool Eliminate => Name.Contains("      ");
         public readonly void PrintChapter()
         {
-            Console.WriteLine($"{Name} == {marker.UnabridgedTime} ==> {AbridgedTime}{(Eliminate ? " ELIMINATED" : "")}");
+            Console.WriteLine($"    {Name} == {marker.UnabridgedTime} ==> {AbridgedTime}{(Eliminate ? " ELIMINATED" : "")}");
         }
     }
 
-
-    struct Audiobook
+    private struct Audiobook
     {
-        public static Audiobook CreateBook(string[] FilePaths)
+        private readonly string[] FilePaths;
+
+        public Audiobook(string[] Files)
         {
-            return new Audiobook
-            {
-                // Create book based on FilePaths array (entry point)
-                FilePaths = FilePaths
-            };
+            FilePaths = Files;
+            CalculateChapters();
         }
 
-        private string[] FilePaths;
-
-        public readonly List<AudioFile> Files
+        private void CalculateChapters()
         {
-            get
-            {
-                return FilePaths.Select(path => AudioFile.InterpretFile(path)).ToList();
-            }
-        }
+            // Create TimeSpan to track seek position into multiple MP3's combined times
+            TimeSpan AbridgedSeekPosition = new(); // Starts at Zero
 
-        public readonly List<Chapter> Chapters
-        {
-            get
+            Chaps = Files.SelectMany(MP3 => // For each MP3 file in the files list:
             {
-                // Create TimeSpan to track seek position into multiple MP3's combined times
-                TimeSpan AbridgedSeekPosition = new(); // Starts at Zero
+                Console.WriteLine($"'{Path.GetFileName(MP3.FileName)}' ({AbridgedSeekPosition}):"); // Print file name and duration
 
-                return Files.SelectMany(MP3 => // For each MP3 file in the files list:
+                // Duration of this MP3, and all previously parsed MP3s
+                AbridgedSeekPosition += MP3.Duration; // before processing the MP3's markers, add MP3 duration to seek position
+
+                return MP3.MediaMarkers.Select(marker => // For each MediaMarker in this MP3 file:
                 {
-                    // Duration of this MP3, and all previously parsed MP3s
-                    AbridgedSeekPosition += MP3.Duration; // before processing the MP3's markers, add MP3 duration to seek position
+                    // CalculatedChapterStart = (Duration of all MP3s including this one) - (duration of this part) + (duration into this part of marker)
 
-                    return MP3.MediaMarkers.Select(marker => // For each MediaMarker in this MP3 file:
+                    // Calculate abridged start time based on the above formula
+                    TimeSpan CalculatedChapterStart = AbridgedSeekPosition - MP3.Duration + marker.UnabridgedTime;
+
+                    // Create chapter object from this marker
+                    Chapter chap = new(marker)
                     {
-                        // CalculatedChapterStart = (Duration of all MP3s including this one) - (duration of this part) + (duration into this part of marker)
-
-                        // Calculate abridged start time based on the above formula
-                        TimeSpan CalculatedChapterStart = AbridgedSeekPosition - MP3.Duration + marker.UnabridgedTime;
-
-                        // Create chapter object from this marker
-                        Chapter chap = Chapter.FromMarker(marker);
-
                         // Set abridged start time to calculated start time
-                        chap.AbridgedTime = CalculatedChapterStart;
+                        AbridgedTime = CalculatedChapterStart
+                    };
 
-                        return chap;
-                    });
-                })
-                .ToList();
-            }
+                    chap.PrintChapter();
+
+                    return chap;
+                });
+            })
+            .ToList();
         }
 
-        public readonly void PrintAllChapters()
-        {
-            Chapters.ForEach(chap =>
-            {
-                chap.PrintChapter();
-            });
-        }
+        public readonly List<AudioFile> Files => FilePaths.Select(path => new AudioFile(path)).ToList();
+        private List<Chapter>? Chaps;
+        private readonly List<Chapter> Chapters => Chaps ?? throw new Exception("[ERROR] Couldn't calculate abridged chapter timings. Chapter list returned null.");
 
         private readonly void WriteMarkersToFileMass()
         {
@@ -356,7 +255,7 @@ public class Program
             for (int i = 0; i < Chapters.Count; i++)
             {
                 Chapter currentChap = Chapters[i];
-                
+
                 if (currentChap.Eliminate)
                 {
                     continue;
