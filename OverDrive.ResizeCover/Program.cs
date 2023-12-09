@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Drawing;
-using System.Drawing.Imaging;
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using System.IO;
 
 class Program
@@ -22,18 +22,25 @@ class Program
 
         string inputPath = args[0];
 
-        if (Directory.Exists(inputPath))
+        try
         {
-            DirectorySweep(inputPath);
+            if (Directory.Exists(inputPath))
+            {
+                DirectorySweep(inputPath);
+            }
+            else if (File.Exists(inputPath) && Path.GetExtension(inputPath) == ".jpg")
+            {
+                FileResize(inputPath);
+            }
+            else
+            {
+                Console.WriteLine($"[INFO] Usage: <folder_path> OR <path_to_jpg>");
+                return;
+            }
         }
-        else if (File.Exists(inputPath) && Path.GetExtension(inputPath) == ".jpg")
+        catch (Exception ex)
         {
-            FileResize(inputPath);
-        }
-        else
-        {
-            Console.WriteLine($"[INFO] Usage: <folder_path> OR <path_to_jpg>");
-            return;
+            Console.WriteLine($"[ERROR] An error occured: {ex}");
         }
 
         return;
@@ -51,28 +58,21 @@ class Program
 
     static void FileResize(string filePath)
     {
-        try
-        {
-            Image coverImage = CoverArtToSquare(filePath); // Get the stretched image
-            coverImage.Save(filePath, ImageFormat.Jpeg); // Save the stretched image
-            Console.WriteLine($"[INFO] Image stretched and saved to: {filePath}");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("[ERROR] An error occurred: " + ex.Message);
-        }
+        Image coverImage = CoverArtToSquare(filePath); // Get the stretched image
+        coverImage.Save(filePath, ImageFormat.Jpeg); // Save the stretched image
+        Console.WriteLine($"[INFO] Image stretched and saved to: {filePath}");
     }
 
     static Image CoverArtToSquare(string imagePath)
     {
         // Load the image from the specified path
         using Image image = Image.FromFile(imagePath);
-        
+
         if (image.Width == image.Height)
         {
             throw new Exception("Image already square!");
         }
-        
+
         int maxSize = Math.Max(image.Width, image.Height);
 
         // Calculate dimensions to fit the original image into the square frame
