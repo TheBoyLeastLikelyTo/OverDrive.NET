@@ -8,39 +8,59 @@ class Program
 {
     static void Main(string[] args)
     {
-        // Example usage: CoverArtToSquare("path_to_your_image.jpg");
-        if (args.Length != 1)
-        {
-            Console.WriteLine("[ERROR] Please provide the path to the cover art JPEG.");
-            return;
-        }
-
-        string imagePath = args[0];
-
-        if (!File.Exists(imagePath))
-        {
-            Console.WriteLine($"[ERROR] The provided file does not exist");
-            return;
-        }
-
         if (Environment.OSVersion.Version < new Version(6, 1))
         {
             Console.WriteLine("[ERROR] This program requires Windows 7 or later to run.");
             return;
         }
 
+        if (args.Length != 1)
+        {
+            Console.WriteLine("[ERROR] Please provide the path to the cover art JPEG.");
+            return;
+        }
+
+        string inputPath = args[0];
+
+        if (Directory.Exists(inputPath))
+        {
+            DirectorySweep(inputPath);
+        }
+        else if (File.Exists(inputPath) && Path.GetExtension(inputPath) == ".jpg")
+        {
+            FileResize(inputPath);
+        }
+        else
+        {
+            Console.WriteLine($"[INFO] Usage: <folder_path> OR <path_to_jpg>");
+            return;
+        }
+
+        return;
+    }
+
+    static void DirectorySweep(string folderPath)
+    {
+        string[] coverFiles = Directory.GetFiles(folderPath, "cover.jpg", SearchOption.AllDirectories);
+
+        foreach (string coverFile in coverFiles)
+        {
+            FileResize(coverFile);
+        }
+    }
+
+    static void FileResize(string filePath)
+    {
         try
         {
-            Image coverImage = CoverArtToSquare(imagePath); // Get the stretched image
-            coverImage.Save(imagePath, ImageFormat.Jpeg); // Save the stretched image
-            Console.WriteLine($"[INFO] Image stretched and saved to: {imagePath}");
+            Image coverImage = CoverArtToSquare(filePath); // Get the stretched image
+            coverImage.Save(filePath, ImageFormat.Jpeg); // Save the stretched image
+            Console.WriteLine($"[INFO] Image stretched and saved to: {filePath}");
         }
         catch (Exception ex)
         {
             Console.WriteLine("[ERROR] An error occurred: " + ex.Message);
         }
-
-        return;
     }
 
     static Image CoverArtToSquare(string imagePath)
