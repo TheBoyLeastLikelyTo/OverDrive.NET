@@ -135,10 +135,15 @@ public class Program
         {
             List<Task> downloadTasks = new();
 
-            foreach (Part part in Parts)
+            int maxDigits = Parts.Count.ToString().Length;
+
+            for (int i = 0; i < Parts.Count; i++)
             {
-                string serverUrl = $"{BaseUrl}/{part.FileName}";
-                downloadTasks.Add(part.DownloadPart(serverUrl, Path.Combine(bookRoot, $"{part.Name}.mp3"), lice));
+                Part currentPart = Parts[i];
+
+                string serverUrl = $"{BaseUrl}/{currentPart.FileName}";
+                string saveAsName = $"Part {currentPart.Number.ToString().PadLeft(maxDigits, '0')}.mp3";
+                downloadTasks.Add(currentPart.DownloadPart(serverUrl, Path.Combine(bookRoot, saveAsName), lice));
             }
 
             await Task.WhenAll(downloadTasks);
