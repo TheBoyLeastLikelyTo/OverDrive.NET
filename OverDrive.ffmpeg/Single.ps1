@@ -6,7 +6,7 @@ function ValidateInputDirectory($input_folder) {
     }
 
     if (-not (Test-Path -Path $input_folder -PathType Container)) {
-        Write-Host "[ERROR] Input folder does not exist." -ForegroundColor Red
+        Write-Host "[ERROR] Input folder does not exist: $input_folder" -ForegroundColor Red
         exit
     }
 
@@ -42,7 +42,10 @@ function Combine($input_folder) {
 
     # Create a temporary list of all the MP3s for use with ffmpeg combination
     $temp_list = "temp.txt"
-    Get-ChildItem -Path "$input_folder\*.mp3" | ForEach-Object { "file '$($_.FullName)'" } | Set-Content -Path $temp_list
+    #Get-ChildItem -Path "$input_folder\*.mp3" | ForEach-Object { "file '$($_.FullName)'" } | Set-Content -Path $temp_list
+    Get-ChildItem -Path "$input_folder\*.mp3" | ForEach-Object { "file '$($_.FullName -replace "'", "'\''")'" } | Set-Content -Path $temp_list
+
+    #Get-Content $temp_list
 
     Write-Host "[MP3 PARTS] Writing MP3 parts to new file, '$output_file'" -ForegroundColor Cyan
     .\ffmpeg -f concat -safe 0 -i $temp_list -c copy $output_file -hide_banner -loglevel error
@@ -109,12 +112,26 @@ function Cover($output_file, $cover_file) {
     return $output_file
 }
 
+function Metadata($output_file, $author, $title) {
+
+    Write-Host "[METADATA] Writing Author: '$author' and Title: '$title' as metadata for the book"
+
+    if (-not (Test-Path -Path $output_file)) {
+        Write-Host "[METADATA] No file found, aborting"
+        return $output_file
+    }  
+
+    
+}
+
 # Main script execution
 $input_folder = $args[0]
 
 ValidateInputDirectory($input_folder)
 
 $author, $title = ParseDirectoryName($input_folder)
+Write-Host "Author: $author"
+Write-Host "Title: $title"
 
 # Combine MP3s
 $output_file = Combine $input_folder
