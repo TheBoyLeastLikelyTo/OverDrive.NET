@@ -6,7 +6,6 @@ using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Xml;
 using System.Xml.Linq;
@@ -30,27 +29,22 @@ public class Program
 
         string targetPath = args[0];
 
-        if (!File.Exists(targetPath) && !Directory.Exists(targetPath))
+        if (!File.Exists(targetPath))
         {
-            Console.WriteLine(Messages.ErrorMessage("File or directory", "provided does not exist!"));
+            Console.WriteLine(Messages.ErrorMessage("File", "provided does not exist!"));
             return;
         }
 
-        string[] odmPaths = targetPath.EndsWith(".odm") ? new string[] { targetPath } : Directory.GetFiles(targetPath, "*.odm");
-
-        foreach (string odmPath in odmPaths)
+        Audiobook book = new(targetPath)
         {
-            Audiobook book = new(odmPath)
-            {
-                SaveMeta = false,
-                SaveLic = false,
-                DownloadParts = true,
-                DownloadCover = true,
-                Return = true
-            };
+            SaveMeta = false,
+            SaveLic = false,
+            DownloadParts = true,
+            DownloadCover = true,
+            Return = false
+        };
 
-            book.DownloadBookFromOdm();
-        }
+        book.DownloadBookFromOdm();
 
         return;
     }
@@ -244,8 +238,9 @@ public class Program
 
         private readonly XDocument MetadataXml => XDocument.Parse(RawMetadata);
         private string GetElementValue(string xpath) => MetadataXml.XPathSelectElement(xpath)?.Value ?? throw new Exception(Messages.ErrorMessage("Metadata", $"XML element '{xpath}' {(MetadataXml.XPathSelectElement(xpath) == null ? "null!" : "value null!")}"));
-        private static string SanitizeString(string? input) => input is null ? throw new ArgumentNullException(nameof(input), "Input string cannot be null.") : Regex.Replace(input, @"[^a-zA-Z0-9\s\._-]", "-").Trim('-', ' ');
-        public string Title => SanitizeString(GetElementValue("//Title"));
+        //private static string SanitizeString(string? input) => input is null ? throw new ArgumentNullException(nameof(input), "Input string cannot be null.") : Regex.Replace(input, @"[^a-zA-Z0-9\s\._-]", "-").Trim('-', ' ');
+        //public string Title => SanitizeString(GetElementValue("//Title"));
+        public string Title => GetElementValue("//Title");
         public string Creator => GetElementValue("//Creator[starts-with(@role, 'Author')]");
         public string CoverUrl => GetElementValue("//CoverUrl");
 
