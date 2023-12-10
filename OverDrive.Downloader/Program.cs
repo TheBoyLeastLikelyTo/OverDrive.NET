@@ -22,72 +22,98 @@ public class Program
 
     public static void Main(string[] args)
     {
-        string odmPath = "";
-
         if (args.Length != 1)
         {
-            Console.WriteLine($"[INFO] Usage: <odm_file>");
-            return;
-        }
-        else if (File.Exists(args[0]))
-        {
-            odmPath = args[0];
-        }
-        else
-        {
-            Console.WriteLine(Messages.ErrorMessage("File", "provided does not exist!"));
+            Console.WriteLine("[INFO] Usage: <odm_file> OR <directory_of_odms");
             return;
         }
 
-        // Create ODM object from given ODM file
-        ODM Odm = new();
-        Odm = new ODM(odmPath);
+        string targetPath = args[0];
 
-        // Setup folder directories
-        string FolderName = $"{Path.GetFileNameWithoutExtension(odmPath)}";
-        string BookFolder = Path.Combine(Directory.GetParent(odmPath).ToString(), FolderName);
-        Directory.CreateDirectory(BookFolder);
-
-        // Get and save or parse the license
-        string licensePath = Path.Combine(BookFolder, $"{FolderName}.license");
-        License license = new();
-        try
+        if (!File.Exists(targetPath) && !Directory.Exists(targetPath))
         {
-            if (!File.Exists(licensePath))
+            Console.WriteLine(Messages.ErrorMessage("File or directory", "provided does not exist!"));
+            return;
+        }
+
+        string[] odmPaths = targetPath.EndsWith(".odm") ? new string[] { targetPath } : Directory.GetFiles(targetPath, "*.odm");
+
+        foreach (string odmPath in odmPaths)
+        {
+            Audiobook book = new(odmPath)
             {
-                license = new License(true, licensePath, Odm);
-                license.ToFile(licensePath);
-            }
-            else
+                SaveMeta = false,
+                SaveLic = false,
+                DownloadParts = true,
+                DownloadCover = true,
+                Return = true
+            };
+
+            book.DownloadBookFromOdm();
+        }
+
+        return;
+    }
+
+    public struct Audiobook
+    {
+        private ODM Odm;
+        private License License;
+
+        public Audiobook(string odmPath) : this() => OdmPath = odmPath;
+        private readonly string FolderName => $"{Odm.Metadata.Creator} - {Odm.Metadata.Title}";
+        private readonly string BookFolder => Path.Combine(Directory.GetParent(OdmPath).ToString(), FolderName);
+        private readonly string LicensePath => Path.Combine(BookFolder, $"{FolderName}.license");
+        private readonly string MetadataPath => Path.Combine(BookFolder, $"{FolderName}.metadata");
+
+        private string OdmPath { get; set; }
+        public bool SaveMeta { get; set; }
+        public bool SaveLic { get; set; }
+        public bool DownloadParts { get; set; }
+        public bool DownloadCover { get; set; }
+        public bool Return { get; set; }
+        public readonly bool WriteToDisk => SaveMeta || SaveLic || DownloadParts || DownloadCover;
+
+        public void DownloadBookFromOdm()
+        {
+            try
             {
-                license = new License(false, licensePath, Odm);
+                ParseOdm();
+
+                if (WriteToDisk) { CreateBookDir(); }
+                if (SaveMeta) { SaveMetadata(); }
+                if (DownloadParts) { GetLicense(); }
+                if (SaveLic) { SaveLicense(); }
+                if (DownloadParts) { GetParts(); }
+                if (DownloadCover) { GetCover(); }
+                if (Return) { ReturnLoan(); }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(Messages.ErrorMessage("Book", $"couldn't be downloaded: {ex}"));
             }
         }
-        catch (Exception ex)
-        {
-            Console.WriteLine(Messages.ErrorMessage("License", $"couldn't be acquired: {ex}"));
-            return;
-        }
 
-        // Save the metadata
-        string metadataPath = Path.Combine(BookFolder, $"{FolderName}.metadata");
-        Odm.Metadata.ToFile(metadataPath);
+        private void ParseOdm() => Odm = new ODM(OdmPath);
+        private readonly void CreateBookDir() => Directory.CreateDirectory(BookFolder);
+        private readonly void SaveMetadata() => Odm.Metadata.ToFile(MetadataPath);
+        private readonly void SaveLicense() => License.ToFile(LicensePath);
+        private void GetLicense() => License = new License(!File.Exists(LicensePath), LicensePath, Odm);
 
-        // Download all the parts
-        try
+        private readonly void GetParts()
         {
+            ODM oDM = Odm;
+            string folder = BookFolder;
+            License lic = License;
+
+            // Download all the parts
             Task.Run(async () =>
             {
-                await Odm.DownloadParts(BookFolder, license);
+                await oDM.DownloadParts(folder, lic);
             }).GetAwaiter().GetResult();
         }
-        catch (Exception ex)
-        {
-            Console.WriteLine(Messages.ErrorMessage("Parts", $"couldn't be downloaded: {ex}"));
-            return;
-        }
 
-        try
+        private readonly void GetCover()
         {
             // Download the cover
             string coverPath = Path.Combine(BookFolder, "cover.jpg");
@@ -95,24 +121,8 @@ public class Program
             Odm.Metadata.DownloadCover(coverPath);
             Console.WriteLine("[FILE] Cover saved to file");
         }
-        catch (Exception ex)
-        {
-            Console.WriteLine(Messages.ErrorMessage("Cover", $"couldn't be downloaded: {ex}"));
-            return;
-        }
 
-        // Return the loan
-        try
-        {
-            Odm.ReturnLoan();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine(Messages.ErrorMessage("Returning", $"the book failed: {ex}"));
-            return;
-        }
-
-        return;
+        private readonly void ReturnLoan() => Odm.ReturnLoan();
     }
 
     public readonly struct ODM
@@ -318,7 +328,6 @@ public class Program
 
         public readonly void ToFile(string filePath)
         {
-            Console.WriteLine(Messages.FileMessage("License", filePath));
             File.WriteAllText(filePath, RawLicense);
         }
 
