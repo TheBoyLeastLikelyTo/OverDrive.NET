@@ -18,7 +18,7 @@ function ValidateInputDirectory($input_folder) {
 
 # Function to extract author and title from directory name
 function ParseDirectoryName($input_folder) {
-    $inputDirectory = Split-Path -Path $input_folder -Leaf 
+    $inputDirectory = ParseFilePath $input_folder
     $splitValues = $inputDirectory -split ' - ' 
 
     if ($splitValues.Count -eq 2) {
@@ -29,11 +29,15 @@ function ParseDirectoryName($input_folder) {
     }
 }
 
+# Function to get the file name from a full path
+function ParseFilePath($path) {
+    return Split-Path -Path $path -Leaf 
+}
+
 # Function to combine MP3s into MKA
 function Combine($input_folder) {
     
     $output_file = "$input_folder\combined.mka" # Prepare the combined MP3 filepath
-    Write-Host "[MP3 PARTS] Using output file path: '$output_file'" -ForegroundColor Cyan
     if (Test-Path -Path $output_file) { Remove-Item $output_file } # Delete existing combined MKA file
 
     # Create a temporary list of all the MP3s for use with ffmpeg combination
@@ -45,7 +49,7 @@ function Combine($input_folder) {
 
     Remove-Item $temp_list
 
-    if (Test-Path -Path $output_file) { Write-Host "[MP3 PARTS] All MP3 files from '$input_folder' combined into '$output_file'." -ForegroundColor Green }
+    if (Test-Path -Path $output_file) { Write-Host "[MP3 PARTS] MP3 files combined into '$output_file' successfully" -ForegroundColor Green }
     else { Write-Host "[ERROR] Error combining MP3 parts to '$output_file'" -ForegroundColor Red }
 
     return $output_file
@@ -70,7 +74,7 @@ function Chapterize($output_file, $chapters_file) {
     if (Test-Path -Path $output_file_with_chapters) { # If the chaptered MKA was created successfully
 
         Remove-Item $output_file # Delete the previously created MKA
-        Write-Host "[CHAPTERS] Chapters written to '$output_file_with_chapters' successfully, original file deleted." -ForegroundColor Green
+        Write-Host "[CHAPTERS] Chapters written to '$output_file_with_chapters' successfully" -ForegroundColor Green
         $output_file = $output_file_with_chapters # Update current MKA file
     }
     else { Write-Host "[ERROR] Error writing chaptered version of '$output_file'" -ForegroundColor Red } # If the chaptered MKA was not created successfully
@@ -81,9 +85,9 @@ function Chapterize($output_file, $chapters_file) {
 # Function to add cover art to MKA
 function Cover($output_file, $cover_file) {
 
-    Write-Host "[CHAPTERS] Searching for cover file: $cover_file" -ForegroundColor Cyan
+    Write-Host "[COVER] Searching for cover file: $cover_file" -ForegroundColor Cyan
     if (-not (Test-Path -Path $cover_file)) {
-        Write-Host "[CHAPTERS] No cover.jpg found, skipping"
+        Write-Host "[COVER] No cover.jpg found, skipping"
         return $output_file
     }    
     
@@ -97,7 +101,7 @@ function Cover($output_file, $cover_file) {
     if (Test-Path -Path $output_file_with_cover) { # If the covered MKA was created successfully
         
         Remove-Item $output_file # Delete the previously created MKA
-        Write-Host "[COVER] Cover written to '$output_file_with_cover' successfully, original file deleted." -ForegroundColor Green
+        Write-Host "[COVER] Cover written to '$output_file_with_cover' successfully" -ForegroundColor Green
         $output_file = $output_file_with_cover # Update current MKA file
     }
     else { Write-Host "[ERROR] Error writing cover version of '$output_file'" -ForegroundColor Red } # If the covered MKA was not created successfully
