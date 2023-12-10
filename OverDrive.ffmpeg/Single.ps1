@@ -43,9 +43,9 @@ function Combine($input_folder) {
     # Create a temporary list of all the MP3s for use with ffmpeg combination
     $temp_list = "temp.txt"
     #Get-ChildItem -Path "$input_folder\*.mp3" | ForEach-Object { "file '$($_.FullName)'" } | Set-Content -Path $temp_list
-    Get-ChildItem -Path "$input_folder\*.mp3" | ForEach-Object { "file '$($_.FullName -replace "'", "'\''")'" } | Set-Content -Path $temp_list
 
     #Get-Content $temp_list
+    Get-ChildItem -Path "$input_folder\*.mp3" | ForEach-Object { "file '$($_.FullName -replace "'", "'\''")'" } | Set-Content -Path $temp_list
 
     Write-Host "[MP3 PARTS] Writing MP3 parts to new file, '$output_file'" -ForegroundColor Cyan
     .\ffmpeg -f concat -safe 0 -i $temp_list -c copy $output_file -hide_banner -loglevel error
@@ -121,7 +121,21 @@ function Metadata($output_file, $author, $title) {
         return $output_file
     }  
 
-    
+    $output_file_with_metadata = "$input_folder\metadata.mka" # Prepare the metadata MKA filepath
+
+    if (Test-Path -Path $output_file_with_metadata) { Remove-Item $output_file_with_metadata } # Delete existing metadata MKA file
+
+    .\ffmpeg -i $output_file -metadata artist="$author" -metadata album="$title" -metadata title="$title" -c copy $output_file_with_metadata -hide_banner -loglevel error
+
+    if (Test-Path -Path $output_file_with_metadata) {
+        
+        Remove-Item $output_file # Delete the previously created MKA
+        Write-Host "[METADATA] Metadata written to '$output_file_with_metadata' successfully" -ForegroundColor Green
+        $output_file = $output_file_with_metadata # Update current MKA file
+    }
+    else { Write-Host "[ERROR] Error writing metadata version of '$output_file'" -ForegroundColor Red } # If the covered MKA was not created successfully
+
+    return $output_file
 }
 
 # Main script execution
@@ -143,6 +157,9 @@ $output_file = Chapterize $output_file $chapters_file
 # Add cover art
 $cover_file = "$input_folder\cover.jpg"
 $output_file = Cover $output_file $cover_file
+
+# Add Metadata
+$output_file = Metadata $output_file $author $title
 
 # Check final MKA file existence
 if (Test-Path -Path $output_file) { 
