@@ -35,8 +35,8 @@ $input_folder = $args[0]
 ValidateInputDirectory($input_folder)
 
 $author, $title = ParseDirectoryName($input_folder)
-Write-Host "Author: $author"
-Write-Host "Title: $title"
+Write-Host "[INFO] Author: $author"
+Write-Host "[INFO] Title: $title"
 
 $output_file = Join-Path -Path $input_folder -ChildPath "combined.mka"
 
@@ -52,6 +52,7 @@ if (Test-Path -Path $output_file)
 }
 
 $fullCommand = ""
+$midCommand = ""
 $commandStart = ".\ffmpeg -f concat -safe 0 -i `"$temp_list`" "
 $commandChapters = "-i `"$chapters_file`" "
 $commandMeta = "-metadata title=`"$title`" -metadata artist=`"$author`" -metadata album=`"$title`""
@@ -62,30 +63,32 @@ if ((-not (Test-Path -Path $cover_file)) -and (-not (Test-Path -Path $chapters_f
 {
     # No Cover or Chapters
     Write-Host "[INFO] No Chapters or Cover found." -ForegroundColor Cyan
-    $fullCommand = $commandStart + $commandMeta + $commandEnd
+    $midCommand = $commandMeta
 }
 elseif ((Test-Path -Path $cover_file) -and (-not (Test-Path -Path $chapters_file)))
 {
     # Cover, but no Chapters
-    Write-Host "[INFO] Cover found, no Chapters found."
-    $fullCommand = $commandStart + $commandMeta + $commandCover + $commandEnd
+    Write-Host "[INFO] Cover found, no Chapters found." -ForegroundColor Cyan
+    $midCommand = $commandMeta + $commandCover
 }
 elseif ((Test-Path -Path $chapters_file) -and (-not (Test-Path -Path $cover_file)))
 {
     # Chapters, but no Cover
-    Write-Host "[INFO] Chapters found, no Cover found."
-    $fullCommand = $commandStart + $commandChapters + $commandMeta + $commandEnd
+    Write-Host "[INFO] Chapters found, no Cover found." -ForegroundColor Cyan
+    $midCommand = $commandChapters + $commandMeta
 }
 elseif ((Test-Path -Path $chapters_file) -and (Test-Path -Path $cover_file))
 {
     # Cover and Chapters
-    Write-Host "[INFO] Cover and Chapters found."
-    $fullCommand = $commandStart + $commandChapters + $commandMeta + $commandCover + $commandEnd
+    Write-Host "[INFO] Cover and Chapters found." -ForegroundColor Cyan
+    $midCommand = $commandChapters + $commandMeta + $commandCover
 }
 else
 {
     <# Action when all if and elseif conditions are false #>
 }
+
+$fullCommand = $commandStart + $midCommand + $commandEnd
 
 #Write-Host $fullCommand
 
