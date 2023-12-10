@@ -22,21 +22,26 @@ class Program
 
         string inputPath = args[0];
 
+        if (!(File.Exists(inputPath) && Path.GetExtension(inputPath) == ".jpg"))
+        {
+            Console.WriteLine($"[INFO] Usage: <folder_path> OR <path_to_jpg>");
+        }
+
         try
         {
-            if (Directory.Exists(inputPath))
+            CoverArtToSquare(inputPath); // Get the stretched image
+
+            if (CoverImage != null)
             {
-                DirectorySweep(inputPath);
-            }
-            else if (File.Exists(inputPath) && Path.GetExtension(inputPath) == ".jpg")
-            {
-                FileResize(inputPath);
+                CoverImage.Save(inputPath, ImageFormat.Jpeg); // Save the stretched image
+                Console.WriteLine($"[INFO] Image stretched and saved to: '{inputPath}'");
             }
             else
             {
-                Console.WriteLine($"[INFO] Usage: <folder_path> OR <path_to_jpg>");
-                return;
+                Console.WriteLine($"[ERROR] '{inputPath}' is already square!");
             }
+
+            return;
         }
         catch (Exception ex)
         {
@@ -46,31 +51,15 @@ class Program
         return;
     }
 
-    static void DirectorySweep(string folderPath)
-    {
-        string[] coverFiles = Directory.GetFiles(folderPath, "cover.jpg", SearchOption.AllDirectories);
-
-        foreach (string coverFile in coverFiles)
-        {
-            FileResize(coverFile);
-        }
-    }
-
-    static void FileResize(string filePath)
-    {
-        Image coverImage = CoverArtToSquare(filePath); // Get the stretched image
-        coverImage.Save(filePath, ImageFormat.Jpeg); // Save the stretched image
-        Console.WriteLine($"[INFO] Image stretched and saved to: {filePath}");
-    }
-
-    static Image CoverArtToSquare(string imagePath)
+    public static void CoverArtToSquare(string imagePath)
     {
         // Load the image from the specified path
         using Image image = Image.FromFile(imagePath);
 
         if (image.Width == image.Height)
         {
-            throw new Exception("Image already square!");
+            CoverImage = null;
+            return;
         }
 
         int maxSize = Math.Max(image.Width, image.Height);
@@ -80,7 +69,7 @@ class Program
         int height = image.Height * maxSize / Math.Max(image.Width, image.Height);
 
         // Create a new square bitmap
-        Bitmap squareImage = new Bitmap(maxSize, maxSize);
+        Bitmap squareImage = new(maxSize, maxSize);
 
         using (Graphics graphic = Graphics.FromImage(squareImage))
         {
@@ -91,6 +80,10 @@ class Program
             graphic.DrawImage(image, 0, 0, maxSize, maxSize);
         }
 
-        return squareImage;
+        CoverImage = squareImage;
+
+        return;
     }
+
+    public static Image? CoverImage { get; set; }
 }
