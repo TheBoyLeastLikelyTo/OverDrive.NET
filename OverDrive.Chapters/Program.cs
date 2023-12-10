@@ -19,16 +19,16 @@ public class Program
             return;
         }
 
-        string folderPath = args[0];
+        string inputPath = args[0];
 
-        if (!Directory.Exists(folderPath))
+        if (!Directory.Exists(inputPath))
         {
             Console.WriteLine("[ERROR] Provided directory does not exist!");
             return;
         }
 
         // Create array of targeted audio files
-        string[] FilePaths = Directory.GetFiles(folderPath, "*.mp3");
+        string[] FilePaths = Directory.GetFiles(inputPath, "*.mp3");
 
         // Check if directory contains any target files
         if (FilePaths.Length == 0)
@@ -58,7 +58,7 @@ public class Program
 
         // Create txt chapters file
         string txt = book.CreateFFMPEG();
-        File.WriteAllText(Path.Combine(folderPath, "chapters.txt"), txt);
+        File.WriteAllText(Path.Combine(inputPath, "chapters.txt"), txt);
 
         // Quit the program
         return;
