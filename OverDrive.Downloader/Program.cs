@@ -38,10 +38,10 @@ public class Program
         Audiobook book = new(targetPath)
         {
             SaveMeta = false,
-            SaveLic = false,
+            SaveLic = true,
             DownloadParts = true,
             DownloadCover = true,
-            Return = false
+            Return = true
         };
 
         book.DownloadBookFromOdm();

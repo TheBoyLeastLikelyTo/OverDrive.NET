@@ -13,7 +13,7 @@ $Books = Get-ChildItem -Path $parentDirectory -Directory
 # Loop through each subdirectory and execute the script with the subdirectory path
 foreach ($Book in $Books) {
     $Path = $Book.FullName
-    Write-Host "[INFO] Combining book in subdirectory: $Path"
+    Write-Host "[INFO] Cleaning book in subdirectory: $Path"
     .\Single.ps1 $Path
 }
 
