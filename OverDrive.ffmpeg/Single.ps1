@@ -65,7 +65,8 @@ Remove-Item $temp_list
 
 if (Test-Path -Path $output_file) {
     $new_output = "$input_folder\$title.mka"
-    Move-Item -Path $output_file -Destination $new_output
+    Copy-Item -Path $output_file -Destination $new_output
+	Remove-Item -path $output_file
     Write-Host "[INFO] Successfully combined '$title' by '$author'" -ForegroundColor Green
 } else {
     Write-Host "[ERROR] Failure combining '$title' by '$author'" -ForegroundColor Red
