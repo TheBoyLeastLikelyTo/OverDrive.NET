@@ -20,6 +20,8 @@ ValidateInputDirectory $input_folder
 
 $author, $title = ParseDirectoryName $input_folder
 
+Write-Host "[INFO] Current Book: $title by $author"
+
 $output_file = Join-Path -Path $input_folder -ChildPath "combined.mka"
 
 $temp_list = "temp.txt"
@@ -66,7 +68,7 @@ Remove-Item $temp_list
 if (Test-Path -Path $output_file) {
     $new_output = "$input_folder\$title.mka"
     Copy-Item -Path $output_file -Destination $new_output
-	Remove-Item -path $output_file
+	Remove-Item -Path $output_file
     Write-Host "[INFO] Successfully combined '$title' by '$author'" -ForegroundColor Green
 } else {
     Write-Host "[ERROR] Failure combining '$title' by '$author'" -ForegroundColor Red
