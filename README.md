@@ -14,6 +14,8 @@ Collection of tools dedicated to cataloging audiobooks obtained from OverDrive
 - Certain books, instead of including "      " for elimination, include null FFFFFF
 - Certain books have a different time format. Not sure if there is any relation between them
 
+### Downloader
 
+- Colon in book title not permitted for use with Windows Directory name
 
 

@@ -13,7 +13,7 @@ using System.Xml.XPath;
 
 namespace OverDrive;
 
-public class Program
+class Program
 {
     static readonly string OMC = "1.2.0";
     static readonly string OS = "10.11.6";
@@ -23,7 +23,7 @@ public class Program
     {
         if (args.Length != 1)
         {
-            Console.WriteLine("[INFO] Usage: <odm_file> OR <directory_of_odms");
+            Console.WriteLine("[INFO] Usage: <odm_file>");
             return;
         }
 
@@ -55,10 +55,11 @@ public class Program
         private License License;
 
         public Audiobook(string odmPath) : this() => OdmPath = odmPath;
-        private readonly string FolderName => $"{Odm.Metadata.Creator} - {Odm.Metadata.Title}";
+        private readonly string FolderName => Sanitize($"{Odm.Metadata.Creator} - {Odm.Metadata.Title}");
         private readonly string BookFolder => Path.Combine(Directory.GetParent(OdmPath).ToString(), FolderName);
         private readonly string LicensePath => Path.Combine(BookFolder, $"{FolderName}.license");
         private readonly string MetadataPath => Path.Combine(BookFolder, $"{FolderName}.metadata");
+        private readonly string CoverPath => Path.Combine(BookFolder, "cover.jpg");
 
         private string OdmPath { get; set; }
         public bool SaveMeta { get; set; }
@@ -72,27 +73,27 @@ public class Program
         {
             try
             {
-                ParseOdm();
+                ParseOdm(); // Parse the contents of the ODM
 
-                if (WriteToDisk) { CreateBookDir(); }
-                if (SaveMeta) { SaveMetadata(); }
-                if (DownloadParts) { GetLicense(); }
-                if (SaveLic) { SaveLicense(); }
-                if (DownloadParts) { GetParts(); }
-                if (DownloadCover) { GetCover(); }
-                if (Return) { ReturnLoan(); }
+                if (WriteToDisk) { CreateBookDir(); } // If any files are written, create a folder for them
+                if (SaveMeta) { SaveMetadata(); } // Save the Metadata chunk of ODM to an independent file
+                if (DownloadParts) { GetLicense(); } // Get the license only if the MP3 parts are desired
+                if (SaveLic) { SaveLicense(); } // Save the License obtained from the OD server to an independent file
+                if (DownloadParts) { GetParts(); } // Download the individual MP3 parts
+                if (DownloadCover) { GetCover(); } // Download the JPG cover of the book
+                if (Return) { ReturnLoan(); } // Return the loan
             }
             catch (Exception ex)
             {
-                Console.WriteLine(Messages.ErrorMessage("Book", $"couldn't be downloaded: {ex}"));
+                Console.WriteLine(ex);
             }
         }
 
         private void ParseOdm() => Odm = new ODM(OdmPath);
-        private readonly void CreateBookDir() => Directory.CreateDirectory(BookFolder);
-        private readonly void SaveMetadata() => Odm.Metadata.ToFile(MetadataPath);
-        private readonly void SaveLicense() => License.ToFile(LicensePath);
-        private void GetLicense() => License = new License(!File.Exists(LicensePath), LicensePath, Odm);
+        private readonly void CreateBookDir() => Directory.CreateDirectory(BookFolder); // Create directory for the book
+        private readonly void SaveMetadata() => File.WriteAllText(MetadataPath, Odm.Metadata.RawMetadata); // Save ODM metadata block
+        private readonly void SaveLicense() => File.WriteAllText(LicensePath, License.LicenseContents); // Save book license
+        private void GetLicense() => License = new License(LicensePath, Odm); // Parse or Download a license for the book
 
         private readonly void GetParts()
         {
@@ -107,16 +108,20 @@ public class Program
             }).GetAwaiter().GetResult();
         }
 
-        private readonly void GetCover()
-        {
-            // Download the cover
-            string coverPath = Path.Combine(BookFolder, "cover.jpg");
-            Console.WriteLine($"[FILE] Cover Path: {coverPath}");
-            Odm.Metadata.DownloadCover(coverPath);
-            Console.WriteLine("[FILE] Cover saved to file");
-        }
+        private readonly void GetCover() => Odm.Metadata.DownloadCover(CoverPath); // Download the book cover
 
-        private readonly void ReturnLoan() => Odm.ReturnLoan();
+        private readonly void ReturnLoan() => Odm.ReturnLoan(); // Return the book to the library it was obtained from
+
+        private static string Sanitize(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                return string.Empty;
+
+            string invalidChars = new string(Path.GetInvalidFileNameChars()) + new string(Path.GetInvalidPathChars());
+            string sanitized = string.Concat(input.Split(invalidChars.ToCharArray()));
+
+            return sanitized;
+        }
     }
 
     public readonly struct ODM
@@ -137,7 +142,7 @@ public class Program
 
         public async readonly Task DownloadParts(string bookRoot, License lice)
         {
-            List<Task> downloadTasks = new();
+            List<Task<bool>> downloads = new();
 
             int maxDigits = Parts.Count.ToString().Length;
 
@@ -146,28 +151,33 @@ public class Program
                 Part currentPart = Parts[i];
 
                 string serverUrl = $"{BaseUrl}/{currentPart.FileName}";
-                string saveAsName = $"Part {currentPart.Number.ToString().PadLeft(maxDigits, '0')}.mp3";
-                downloadTasks.Add(currentPart.DownloadPart(serverUrl, Path.Combine(bookRoot, saveAsName), lice));
+                string localFileName = $"Part {currentPart.Number.ToString().PadLeft(maxDigits, '0')}.mp3";
+                string localPath = Path.Combine(bookRoot, localFileName);
+                downloads.Add(currentPart.DownloadPart(serverUrl, localPath, lice));
             }
 
-            await Task.WhenAll(downloadTasks);
-            Console.WriteLine(Messages.DownloadMessage($"{Parts.Count} parts"));
+            await Task.WhenAll(downloads);
+            int successCount = downloads.Count(task => task.Result);
+            Console.WriteLine(Messages.DownloadMessage($"{successCount}/{Parts.Count} parts"));
         }
 
         public readonly void ReturnLoan()
         {
+            // Prepare the HTTP client
             using HttpClient httpClient = new();
             httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
+
+            // Try to get an HTTP response
             HttpResponseMessage response = httpClient.GetAsync(ReturnUrl).Result;
 
-            if (response.IsSuccessStatusCode)
+            if (!response.IsSuccessStatusCode)
             {
-                Console.WriteLine("[LOAN] Loan Returned");
+                Console.WriteLine($"[LOAN] Couldn't Return Loan, status code: {response.StatusCode}");
+                return;
             }
-            else
-            {
-                Console.WriteLine($"[LOAN] Couldn't Return Loan. Is it already returned? Status Code: {response.StatusCode}");
-            }
+
+            Console.WriteLine("[LOAN] Loan Returned");
+            return;
         }
     }
 
@@ -184,81 +194,81 @@ public class Program
         public readonly string FileName => GetAttributeValue("filename", s => s.Replace("{", "%7B").Replace("}", "%7D"));
         public readonly string Duration => GetAttributeValue("duration", s => s);
 
-        public async readonly Task DownloadPart(string serverUrl, string localPath, License lice)
+        public async readonly Task<bool> DownloadPart(string serverUrl, string localPath, License lice)
         {
-            using HttpClient httpClient = new();
-            httpClient.DefaultRequestHeaders.Add("License", lice.LicenseContents);
-            httpClient.DefaultRequestHeaders.Add("ClientID", lice.ClientID);
-            httpClient.DefaultRequestHeaders.Add("User-Agent", UserAgent);
+            if (File.Exists(localPath)) { File.Delete(localPath); } // Delete MP3 if it already exists
 
+            // Prepare the HTTP client
+            using HttpClient httpClient = new();
+            httpClient.DefaultRequestHeaders.Add("License", lice.LicenseContents); // Add license to header
+            httpClient.DefaultRequestHeaders.Add("ClientID", lice.ClientID); // Add client ID to header
+            httpClient.DefaultRequestHeaders.Add("User-Agent", UserAgent); // Add OD user agent to header
+
+            // Try to get a HTTP response
             HttpResponseMessage response = await httpClient.GetAsync(serverUrl);
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new Exception(Messages.ErrorMessage("Part", $"couldn't be pulled from the server, return code: {response.StatusCode}"));
+                throw new Exception(Messages.ErrorMessage("Part", $"couldn't be pulled from the server, status code: {response.StatusCode}"));
             }
 
+            // Download the part itself
             using Stream contentStream = await response.Content.ReadAsStreamAsync();
             using FileStream fileStream = File.Create(localPath);
             await contentStream.CopyToAsync(fileStream);
-            Console.Write(Messages.DownloadMessage(Name));
-            VerifyPart(localPath);
+
+            // Check that the downloaded part matches the expected size written in ODM
+            (long actualSize, long expectedSize) = VerifyPart(localPath);
+            bool partVerified = actualSize == expectedSize;
+
+            // Write part, once downloaded, to console
+            Console.WriteLine(Messages.DownloadMessage($"{Name} ... {(partVerified ? "Verified!" : $"Expected: {expectedSize}, Actual: {actualSize}")}"));
+
+            return File.Exists(localPath); // Return true if downloaded part exists
         }
 
-        public readonly void VerifyPart(string localPath)
+        public readonly (long, long) VerifyPart(string localPath)
         {
             FileInfo fileInfo = new(localPath);
-            long fileSize = fileInfo.Length;
-            long expectedSize = FileSize;
+            long actualSize = fileInfo.Length; // Size of file on disk
+            long expectedSize = FileSize; // ODM expected size
 
-            if (fileSize == expectedSize)
-            {
-                Console.Write("... Verified!");
-            }
-            else
-            {
-                Console.Write($"... Not verified, Size Expected: {expectedSize}, Actual Size: {fileSize}");
-            }
-
-            Console.WriteLine();
+            return (actualSize, expectedSize);
         }
     }
 
     public readonly struct Metadata
     {
-        private readonly string RawMetadata;
+        public readonly string RawMetadata;
 
-        public Metadata(string fileContents) => RawMetadata = fileContents ?? throw new ArgumentNullException(nameof(fileContents));
-
-        public readonly void ToFile(string filePath)
-        {
-            Console.WriteLine(Messages.FileMessage("Metadata", filePath));
-            File.WriteAllText(filePath, RawMetadata);
-        }
+        public Metadata(string fileContents) => RawMetadata = fileContents;
 
         private readonly XDocument MetadataXml => XDocument.Parse(RawMetadata);
         private string GetElementValue(string xpath) => MetadataXml.XPathSelectElement(xpath)?.Value ?? throw new Exception(Messages.ErrorMessage("Metadata", $"XML element '{xpath}' {(MetadataXml.XPathSelectElement(xpath) == null ? "null!" : "value null!")}"));
-        //private static string SanitizeString(string? input) => input is null ? throw new ArgumentNullException(nameof(input), "Input string cannot be null.") : Regex.Replace(input, @"[^a-zA-Z0-9\s\._-]", "-").Trim('-', ' ');
-        //public string Title => SanitizeString(GetElementValue("//Title"));
         public string Title => GetElementValue("//Title");
         public string Creator => GetElementValue("//Creator[starts-with(@role, 'Author')]");
         public string CoverUrl => GetElementValue("//CoverUrl");
 
         public readonly void DownloadCover(string localPath)
         {
+            // Prepare the HTTP client
             using HttpClient client = new();
+
+            // Try to get a HTTP response
             HttpResponseMessage response = client.GetAsync(CoverUrl).Result;
 
             if (!response.IsSuccessStatusCode)
             {
-                Console.WriteLine(Messages.ErrorMessage("Cover", $"couldn't be pulled from the server, return code: {response.StatusCode}"));
+                Console.WriteLine(Messages.ErrorMessage("Cover", $"couldn't be pulled from the server, status code: {response.StatusCode}"));
                 return;
             }
 
+            // Download the cover itself
             using Stream stream = response.Content.ReadAsStreamAsync().Result;
             using FileStream fileStream = File.Create(localPath);
             stream.CopyTo(fileStream);
 
+            // Write cover, once downloaded, to console
             Console.WriteLine(Messages.DownloadMessage("cover"));
         }
     }
@@ -267,22 +277,21 @@ public class Program
     {
         private readonly string RawLicense;
 
-        public License(bool getFromServer, string localPath, ODM Odm)
+        public License(string localPath, ODM Odm)
         {
-            Console.WriteLine(Messages.FileMessage("License", localPath));
-            if (getFromServer)
+            if (File.Exists(localPath))
             {
-                Console.WriteLine($"[LICENSE] No license found, trying to get one from the server...");
-                RawLicense = GetFromServer(Odm);
-                Console.WriteLine($"[LICENSE] License acquired from server!");
+                RawLicense = GetFromFile(localPath);
+                Console.WriteLine("[LICENSE] License read from file");
             }
             else
             {
-                RawLicense = localPath ?? throw new Exception(Messages.ErrorMessage("License", "loaded from file is null and cannot be used!"));
-                RawLicense = File.ReadAllText(RawLicense);
-                Console.WriteLine("[LICENSE] License read from file");
+                RawLicense = GetFromServer(Odm);
+                Console.WriteLine($"[LICENSE] License acquired from server");
             }
         }
+
+        private static string GetFromFile(string localPath) => File.ReadAllText(localPath);
 
         private static string GetFromServer(ODM data)
         {
@@ -294,36 +303,32 @@ public class Program
 
             // Get and print MediaID (from ODM file)
             string MediaID = data.MediaID;
-
             // Calculate hash
-            string RawHash = $"{ClientID}|{OMC}|{OS}|ELOSNOC*AIDEM*EVIRDREVO";
-            using SHA1 sha1 = SHA1.Create();
-            string Hash = Convert.ToBase64String(sha1.ComputeHash(Encoding.Unicode.GetBytes(RawHash)));
+            string Hash = Convert.ToBase64String(SHA1.Create().ComputeHash(Encoding.Unicode.GetBytes($"{ClientID}|{OMC}|{OS}|ELOSNOC*AIDEM*EVIRDREVO")));
 
-            // Construct URL for license request
+            // Construct URL for license download
             string requestUrl = $"{AcquisitionUrl}?MediaID={MediaID}&ClientID={ClientID}&OMC={OMC}&OS={OS}&Hash={Hash}";
 
-            return DownloadLicense(requestUrl);
+            // Return license contents
+            return Download(requestUrl);
         }
 
-        private static string DownloadLicense(string fileUrl)
+        private static string Download(string fileUrl)
         {
+            // Prepare the HTTP client
             using HttpClient httpClient = new();
             httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
+
+            // Try to get a HTTP response
             HttpResponseMessage response = httpClient.GetAsync(fileUrl).Result;
 
             if (!response.IsSuccessStatusCode)
             {
-                Console.WriteLine(Messages.ErrorMessage("License", $"couldn't be pulled from the server, return code: {response.StatusCode}"));
+                Console.WriteLine(Messages.ErrorMessage("License", $"couldn't be pulled from the server, status code: {response.StatusCode}"));
             }
 
-            Console.WriteLine(Messages.DownloadMessage("license"));
-            return response.Content.ReadAsStringAsync().Result;
-        }
-
-        public readonly void ToFile(string filePath)
-        {
-            File.WriteAllText(filePath, RawLicense);
+            Console.WriteLine(Messages.DownloadMessage("license")); // Write success to console
+            return response.Content.ReadAsStringAsync().Result; // Return license contents
         }
 
         public readonly string LicenseContents => RawLicense ?? throw new Exception(Messages.ErrorMessage("License", "contents returned null!"));
@@ -339,7 +344,6 @@ public class Program
     public class Messages
     {
         public static string ErrorMessage(string product, string message) => $"[ERROR] {product} {message}";
-        public static string DownloadMessage(string product) => $"[DOWNLOAD] Downloaded {product} successfully!";
-        public static string FileMessage(string product, string filePath) => $"[FILE] {product} Path: '{filePath}'";
+        public static string DownloadMessage(string product) => $"[DOWNLOAD] Downloaded {product}";
     }
 }
