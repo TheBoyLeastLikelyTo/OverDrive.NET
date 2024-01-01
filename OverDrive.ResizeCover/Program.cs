@@ -13,32 +13,36 @@ class Program
             Console.WriteLine("[ERROR] This program requires Windows 7 or later to run.");
             return;
         }
-
-        if (args.Length != 1)
+        else if (args.Length != 1)
         {
-            Console.WriteLine("[ERROR] Please provide the path to the cover art JPEG.");
+            Console.WriteLine($"[INFO] Usage: <path_to_jpg>");
+            return;
+        }
+        else if (Path.GetExtension(args[0]) != ".jpg")
+        {
+            Console.WriteLine("[ERROR] The provided file is not a .JPG file.");
+            return;
+        }
+        else if (!File.Exists(args[0]))
+        {
+            Console.WriteLine("[ERROR] Provided file does not exist.");
             return;
         }
 
         string inputPath = args[0];
 
-        if (!(File.Exists(inputPath) && Path.GetExtension(inputPath) == ".jpg"))
-        {
-            Console.WriteLine($"[INFO] Usage: <folder_path> OR <path_to_jpg>");
-        }
-
         try
         {
-            CoverArtToSquare(inputPath); // Get the stretched image
+            Image? CoverImage = CoverArtToSquare(inputPath); // Get the stretched image
 
             if (CoverImage != null)
             {
                 CoverImage.Save(inputPath, ImageFormat.Jpeg); // Save the stretched image
-                Console.WriteLine($"[INFO] Image stretched and saved to: '{inputPath}'");
+                Console.WriteLine($"[INFO] '{Path.GetFileName(inputPath)}' stretched and saved!");
             }
             else
             {
-                Console.WriteLine($"[ERROR] '{inputPath}' is already square!");
+                Console.WriteLine($"[ERROR] '{Path.GetFileName(inputPath)}' is already square!");
             }
 
             return;
@@ -51,15 +55,14 @@ class Program
         return;
     }
 
-    public static void CoverArtToSquare(string imagePath)
+    public static Image? CoverArtToSquare(string imagePath)
     {
         // Load the image from the specified path
         using Image image = Image.FromFile(imagePath);
 
         if (image.Width == image.Height)
         {
-            CoverImage = null;
-            return;
+            return null;
         }
 
         int maxSize = Math.Max(image.Width, image.Height);
@@ -80,10 +83,6 @@ class Program
             graphic.DrawImage(image, 0, 0, maxSize, maxSize);
         }
 
-        CoverImage = squareImage;
-
-        return;
+        return squareImage;
     }
-
-    public static Image? CoverImage { get; set; }
 }
