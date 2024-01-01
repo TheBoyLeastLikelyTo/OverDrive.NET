@@ -15,7 +15,7 @@ public class Program
     {
         if (args.Length != 1)
         {
-            Console.WriteLine($"[INFO] Usage: <folder_path>");
+            Console.WriteLine($"[INFO] Usage: <book_folder>");
             return;
         }
 
@@ -34,7 +34,7 @@ public class Program
         if (FilePaths.Length == 0)
         {
             // If no files in directory
-            Console.WriteLine($"[ERROR] No mp3 files in specified folder!");
+            Console.WriteLine($"[ERROR] No MP3 files in specified folder!");
             return;
         }
 
@@ -48,7 +48,7 @@ public class Program
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[ERROR] Error parsing gathered chapters: {ex.Message}");
+            Console.WriteLine(ex);
         }
 
         /* Create XML chapters file
@@ -92,9 +92,9 @@ public class Program
 
                 // Create list of MediaMarkers based on XML contained in the "Markers" tag
                 return odChapters.SelectNodes("/Markers/Marker") // Select the applicable node
-                    ?.Cast<XmlNode>() // Convert it to XmlNode
-                    .Select(node => new MediaMarker(node)) // Return a MediaMarker of a particular node
-                    .ToList() ?? throw new Exception("MediaMarkers tag doesn't contain valid XML!"); // If null, error
+                ?.Cast<XmlNode>() // Convert it to XmlNode
+                .Select(node => new MediaMarker(node)) // Return a MediaMarker of a particular node
+                .ToList() ?? throw new Exception("MediaMarkers tag doesn't contain valid XML!"); // If null, error
             }
         }
 
@@ -165,9 +165,9 @@ public class Program
         public readonly string Name => marker.Name;
         public TimeSpan AbridgedTime { get; set; }
         public readonly bool Eliminate => Name.Contains("      ");
-        public readonly void PrintChapter()
+        public override string ToString()
         {
-            Console.WriteLine($"    {Name} == {marker.UnabridgedTime} ==> {AbridgedTime}{(Eliminate ? " ELIMINATED" : "")}");
+            return $"    {Name} == {marker.UnabridgedTime} ==> {AbridgedTime}{(Eliminate ? " ELIMINATED" : "")}";
         }
     }
 
@@ -178,6 +178,7 @@ public class Program
         public Audiobook(string[] Files)
         {
             FilePaths = Files;
+            //WriteMarkersToFileMass();
             CalculateChapters();
         }
 
@@ -207,7 +208,7 @@ public class Program
                         AbridgedTime = CalculatedChapterStart
                     };
 
-                    chap.PrintChapter();
+                    Console.WriteLine(chap.ToString());
 
                     return chap;
                 });
